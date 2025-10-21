@@ -6,7 +6,7 @@ PODS:
   - EXJSONUtils (0.15.0)
   - EXManifests (1.0.8):
     - ExpoModulesCore
-  - Expo (54.0.13):
+  - Expo (54.0.15):
     - ExpoModulesCore
     - hermes-engine
     - RCTRequired
@@ -216,7 +216,7 @@ PODS:
     - ExpoModulesCore
   - ExpoLinking (8.0.8):
     - ExpoModulesCore
-  - ExpoModulesCore (3.0.21):
+  - ExpoModulesCore (3.0.22):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2200,7 +2200,7 @@ SPEC CHECKSUMS:
   EXConstants: a95804601ee4a6aa7800645f9b070d753b1142b3
   EXJSONUtils: 1d3e4590438c3ee593684186007028a14b3686cd
   EXManifests: 224345a575fca389073c416297b6348163f28d1a
-  Expo: 6580dbf21d94626792b38a95cddb2fb369ec6b0c
+  Expo: 1164f0b109fc9c10701f80387a7be60a35984811
   expo-dev-client: 6da1a574fa7caa33a315d818b43c4e560be91915
   expo-dev-launcher: ab4604b4cc823ff8c67835a90e7e36834224ea8c
   expo-dev-menu: 6db57f4d3001fe3992d84a0c2e285de381e4b51b
@@ -2212,7 +2212,7 @@ SPEC CHECKSUMS:
   ExpoFont: cf9d90ec1d3b97c4f513211905724c8171f82961
   ExpoKeepAwake: 1a2e820692e933c94a565ec3fbbe38ac31658ffe
   ExpoLinking: f051f28e50ea9269ff539317c166adec81d9342d
-  ExpoModulesCore: 3a6eb12a5f4d67b2f5fc7d0bc4777b18348f2d7a
+  ExpoModulesCore: d128da9ae4ec1e5a26eca91f1b7cce9a92be3892
   ExpoSecureStore: 9c6571fe3fcb045a671c4011c451546eaaab98fd
   ExpoWebBrowser: d04a0d6247a0bea4519fbc2ea816610019ad83e0
   EXUpdatesInterface: 5adf50cb41e079c861da6d9b4b954c3db9a50734
