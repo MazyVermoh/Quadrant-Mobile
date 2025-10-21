@@ -1,7 +1,12 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { Linking } from "react-native";
+import { Buffer } from "buffer";
 import { makeRedirectUri } from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
 import Constants from "expo-constants";
+import { apiFetch } from "../services/api";
+
+WebBrowser.maybeCompleteAuthSession();
 
 type TelegramAuthUser = {
   id: number;
@@ -11,6 +16,11 @@ type TelegramAuthUser = {
   photo_url?: string;
   auth_date: number;
   hash: string;
+};
+
+type TelegramAuthPayload = {
+  user: TelegramAuthUser;
+  rawInitData: string;
 };
 
 type AuthContextValue = {
@@ -28,22 +38,86 @@ const getTelegramBotId = (): string | undefined => {
   return typeof id === "string" && id.trim().length > 0 ? id.trim() : undefined;
 };
 
-const extractTelegramUser = (url?: string): TelegramAuthUser | undefined => {
+const serializeTelegramInitData = (data: TelegramAuthUser): string => {
+  const params = new URLSearchParams();
+  (Object.entries(data) as [keyof TelegramAuthUser, TelegramAuthUser[keyof TelegramAuthUser]][]).forEach(
+    ([key, value]) => {
+      if (value === undefined || value === null) {
+        return;
+      }
+      params.append(key, typeof value === "number" ? String(value) : value);
+    }
+  );
+  return params.toString();
+};
+
+const extractTelegramPayload = (url?: string): TelegramAuthPayload | undefined => {
   if (!url) {
     return undefined;
   }
-  const hashSection = url.split("#")[1];
-  if (!hashSection) {
+
+  let searchParams: URLSearchParams | undefined;
+
+  try {
+    const parsed = new URL(url);
+    if (parsed.search && parsed.search.includes("tgAuthResult")) {
+      searchParams = new URLSearchParams(parsed.search);
+    } else if (parsed.hash && parsed.hash.includes("tgAuthResult")) {
+      searchParams = new URLSearchParams(parsed.hash.replace(/^#/u, ""));
+    }
+  } catch {
+    const hashSection = url.split("#")[1];
+    if (hashSection) {
+      searchParams = new URLSearchParams(hashSection);
+    }
+  }
+
+  if (!searchParams) {
     return undefined;
   }
-  const params = new URLSearchParams(hashSection);
-  const rawResult = params.get("tgAuthResult");
+
+  const rawResult = searchParams.get("tgAuthResult");
   if (!rawResult) {
     return undefined;
   }
   try {
     const decoded = decodeURIComponent(rawResult);
-    return JSON.parse(decoded) as TelegramAuthUser;
+
+    const tryParse = (value: string): TelegramAuthUser | undefined => {
+      try {
+        const parsed = JSON.parse(value);
+        if (parsed && typeof parsed === "object") {
+          return parsed as TelegramAuthUser;
+        }
+        if (typeof parsed === "string") {
+          return tryParse(parsed);
+        }
+      } catch {
+        // ignore and fall back to base64 decode
+      }
+      return undefined;
+    };
+
+    let user = tryParse(decoded);
+
+    if (!user) {
+      try {
+        const base64Decoded = Buffer.from(decoded, "base64").toString("utf-8");
+        user = tryParse(base64Decoded);
+      } catch (error) {
+        console.warn("Failed to decode base64 Telegram auth result", error);
+      }
+    }
+
+    if (!user) {
+      console.warn("Telegram auth payload could not be parsed");
+      return undefined;
+    }
+
+    return {
+      user,
+      rawInitData: serializeTelegramInitData(user)
+    };
   } catch (error) {
     console.warn("Failed to decode Telegram auth result", error);
     return undefined;
@@ -66,33 +140,58 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
     setIsAuthenticating(true);
     try {
-      const redirectUri = makeRedirectUri();
-      const redirectOrigin = (() => {
-        try {
-          const parsed = new URL(redirectUri);
-          return parsed.origin;
-        } catch {
-          return "https://auth.expo.io";
-        }
-      })();
+      const redirectOrigin = "https://website-ruby-phi-28.vercel.app";
+      const redirectUri = makeRedirectUri({ scheme: "quadrant", path: "auth" });
 
       const authUrl = `https://oauth.telegram.org/auth?bot_id=${botId}&embed=1&origin=${encodeURIComponent(
         redirectOrigin
       )}&return_to=${encodeURIComponent(redirectUri)}&request_access=write`;
 
       const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+      console.log("telegram auth result", result);
 
-      if (result.type === "success") {
-        const telegramUser = extractTelegramUser(result.url);
-        if (!telegramUser) {
+      const resultUrl = "url" in result ? result.url : undefined;
+      const resolvePayload = async (url?: string) => {
+        let payload = extractTelegramPayload(url);
+
+        if (!payload) {
+          const initialUrl = await Linking.getInitialURL();
+          if (initialUrl) {
+            payload = extractTelegramPayload(initialUrl);
+          }
+        }
+
+        if (!payload) {
           throw new Error("invalid_payload");
         }
-        setUser(telegramUser);
-      } else if (result.type === "dismiss" || result.type === "cancel") {
-        throw new Error("cancelled");
-      } else {
+
+        await apiFetch("/api/v1/users/me", {
+          headers: {
+            "X-Telegram-Init-Data": payload.rawInitData,
+            Accept: "application/json"
+          }
+        });
+
+        setUser(payload.user);
+      };
+
+      if (result.type === "cancel" || result.type === "dismiss") {
+        try {
+          await resolvePayload(resultUrl);
+          return;
+        } catch {
+          throw new Error("cancelled");
+        }
+      }
+
+      if (result.type !== "success") {
         throw new Error("unknown_error");
       }
+
+      await resolvePayload(resultUrl);
+    } catch (error) {
+      console.error("Telegram sign-in failed", error);
+      throw error;
     } finally {
       setIsAuthenticating(false);
     }
